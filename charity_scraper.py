@@ -89,6 +89,9 @@ class Scraper:
         time.sleep(1)
         self.scrape_pages()
 
+    def charity_link_urls(self):
+        return ["https://register-of-charities.charitycommission.gov.uk/charity-search/-/charity-details/{regno}".format(regno = charity_num) for charity_num in self.charity_links]
+
 if __name__ == "__main__":
     scraper = Scraper()
     scraper.set_criteria({  
@@ -101,4 +104,4 @@ if __name__ == "__main__":
     scraper.kickoff_search()
 
     scraper.scrape_pages()
-    print(scraper.charity_links)
+    print(scraper.charity_link_urls())
