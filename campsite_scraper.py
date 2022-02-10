@@ -31,12 +31,15 @@ class Scraper:
         self.page_num = 0
         # create folder if it doesn't yet exist
         self.storage_folder = './raw_data'
-        if not os.path.exists(self.storage_folder):
-            os.makedirs(self.storage_folder)
+        Scraper.create_folder_if_not_exists(self.storage_folder)
         # urllib user-agent seems to be blocked by the image source (returns 403)
         opener = urllib.request.build_opener()
         opener.addheaders = [('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.81 Safari/537.36')]
         urllib.request.install_opener(opener)
+
+    def create_folder_if_not_exists(f):
+        if not os.path.exists(f):
+            os.makedirs(f)
 
     def open_england_search(self):
         search_link = self.driver.find_element(By.ID, 'www-homepage-top-sites-image-england')
@@ -48,14 +51,14 @@ class Scraper:
             time.sleep(1)
         except TimeoutException:
             print("Timed out loading England search page")
-
+    
     def enter_data_into_box(self, id, content = None):
         box = self.driver.find_element(By.ID, id)
         box.click()
         if content:
             box.send_keys(content)
 
-    def set_search_criteria(self, criteria):
+    def search_with_criteria(self, criteria):
         for key, value in criteria.items():
             id_for_key = Scraper.field_ids[key]
             if type(id_for_key) == str:
@@ -65,8 +68,6 @@ class Scraper:
                 # the keys of id_for_key will match the contents of the list value
                 for k in value:
                     self.enter_data_into_box(id_for_key[k])
-            
-    def kickoff_search(self):
         time.sleep(0.75)
         search_button = self.driver.find_element(By.CLASS_NAME, 'btn-update-search')
         search_button.click()
@@ -89,9 +90,9 @@ class Scraper:
             } for td in td_list if td.text != ''])
 
     def scrape_pages(self):
-        # do the current page
         self.page_num += 1
         print(f'scraping page {self.page_num}...')
+        # do the current page
         self.grab_links_from_search_results_page()
         # then scrape the next one
         next_prev_page = self.driver.find_elements(By.CLASS_NAME, 'prevnext')
@@ -100,6 +101,7 @@ class Scraper:
             return
         self.driver.get(next_page[0])
         time.sleep(1)
+        # recursion
         self.scrape_pages()
 
     def retrieve_specific_campsite_data(self, campsite):
@@ -150,15 +152,13 @@ class Scraper:
     def save_specific_campsite_data(self, campsite):
         details = self.retrieve_specific_campsite_data(campsite)
         campsite_file_folder = os.path.join(self.storage_folder, details['id'])
-        if not os.path.exists(campsite_file_folder):
-            os.makedirs(campsite_file_folder)
+        Scraper.create_folder_if_not_exists(campsite_file_folder)
         campsite_file_path = os.path.join(campsite_file_folder, 'data.json')
         with open(campsite_file_path, 'w') as f:
             json.dump(details, f)
         if details['images']:
             image_folder = os.path.join(campsite_file_folder, 'images')
-            if not os.path.exists(image_folder):
-                os.makedirs(image_folder)
+            Scraper.create_folder_if_not_exists(image_folder)
             for idx, img in enumerate(details['images']):
                 time.sleep(1)
                 urllib.request.urlretrieve(img, os.path.join(image_folder, f"{idx}.jpg"))
@@ -171,7 +171,6 @@ class Scraper:
 if __name__ == "__main__":
     scraper = Scraper()
     scraper.open_england_search()
-    scraper.set_search_criteria({'keywords':'west sussex', 'types': ['tent','caravan']})
-    scraper.kickoff_search()
+    scraper.search_with_criteria({'keywords':'west sussex', 'types': ['tent','caravan']})
     scraper.scrape_pages()
     scraper.save_all_campsite_data()
