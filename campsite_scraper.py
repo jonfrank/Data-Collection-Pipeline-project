@@ -233,8 +233,8 @@ class Scraper:
 
 if __name__ == "__main__":
     scraper = Scraper()
-    # scraper.open_england_search()
-    # scraper.search_with_criteria({'keywords':'west sussex', 'types': ['tent','caravan']})
-    # scraper.scrape_pages()
-    # scraper.save_all_campsite_data()
+    scraper.open_england_search()
+    scraper.search_with_criteria({'keywords':'west sussex', 'types': ['tent','caravan']})
+    scraper.scrape_pages()
+    scraper.save_all_campsite_data()
     scraper.upload_data_to_s3()
