@@ -1,4 +1,5 @@
 from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -25,7 +26,7 @@ class Scraper:
 
     def __init__(self):
         """Initialise the scraper, creating local storage folder ./raw_data if it doesn't already exist."""
-        self.driver = webdriver.Chrome()
+        self.driver = webdriver.Chrome(ChromeDriverManager().install())
         search_url = 'https://pitchup.com'
         self.driver.get(search_url)
         self.campsite_links = []
