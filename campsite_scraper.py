@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError
 from pathlib import Path
 
 test_mode = True # just scrape first page
+bucket = 'aicore-jf-campsite-bucket'
 
 class Scraper:
     """Search the pitchup.com website and scrape details and images of each of the campsites returned."""
@@ -206,7 +207,6 @@ class Scraper:
 
     def upload_data_to_s3(self):
         session = boto3.Session(profile_name='aicore')
-        bucket = 'aicore-jf-campsite-bucket'
         s3 = session.resource('s3')
         for dirname in os.listdir(self.storage_folder):
             dir = os.path.join(self.storage_folder, dirname)
