@@ -264,6 +264,7 @@ class Scraper:
                     self.retrieve_and_upload_images(details)
 
     def retrieve_and_upload_images(self, details):
+        """Retrieve key images for a given campsite and send them to S3."""
         # clear folder before we start
         self.__clear_local_folder()
         for idx, img in enumerate(details['images']):
@@ -289,45 +290,6 @@ class Scraper:
             self.progress.update(1)
             if (saved_count == self.campsite_count):
                 break
-    
-    # def upload_data_to_s3_and_rds(self):
-    #     self.__rds_connect()
-    #     campsite_df = pd.DataFrame()
-    #     for dirname in os.listdir(self.storage_folder):
-    #         dir = os.path.join(self.storage_folder, dirname)
-    #         if os.path.isdir(dir):
-    #             # prep this item to upload to RDS as a batch at the end 
-    #             with open(os.path.join(dir, 'data.json'), 'r') as f:
-    #                 d = json.load(f)
-    #                 if 'images' in d:
-    #                     del d['images']
-    #                 if 'bullets' in d:
-    #                     d['bullets'] = ' / '.join(d['bullets'])
-    #                 campsite_df = pd.concat([campsite_df, pd.DataFrame([d])])
-
-    #             # then the images, named {uuid}-0.jpg etc
-    #             images_folder = os.path.join(dir, 'images')
-    #             if os.path.exists(images_folder):
-    #                 for filename in os.listdir(images_folder):
-    #                     try:
-    #                         response = self.s3.meta.client.upload_file(os.path.join(images_folder, filename), self.bucket, f"{d['uuid']}-{filename}")
-    #                     except ClientError as e:
-    #                         print(f"Error uploading image {filename} for {d['uuid']}: {e}")
-    #     tuples = [tuple(x) for x in campsite_df.to_numpy()]
-    #     cols = ','.join(list(campsite_df.columns))
-    #     value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
-    #     query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
-    #     cursor = self.conn.cursor()
-    #     try:
-    #         extras.execute_batch(cursor, query, tuples)
-    #         self.conn.commit()
-    #         print('Finished writing all campsites to cloud storage.')
-    #         cursor.close()
-    #     except (Exception, psycopg2.DatabaseError) as error:
-    #         print("Error writing to RDS: {}".format(error))
-    #         self.conn.rollback()
-    #         cursor.close()
-        
 
 if __name__ == "__main__":
     scraper = Scraper(campsite_count=25, test_mode=False)
@@ -335,4 +297,3 @@ if __name__ == "__main__":
     scraper.search_with_criteria({'types': ['tent','caravan']})
     scraper.scrape_pages()
     scraper.save_all_campsite_data()
-    # scraper.upload_data_to_s3_and_rds()
