@@ -1,10 +1,12 @@
 from multiprocessing.connection import Client
 from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from selenium.common.exceptions import TimeoutException
 import time
 from urllib.parse import urlparse
@@ -15,9 +17,12 @@ import json
 import boto3
 from botocore.exceptions import ClientError
 from pathlib import Path
-
-test_mode = True # just scrape first page
-bucket = 'aicore-jf-campsite-bucket'
+import pandas as pd
+import psycopg2
+from psycopg2 import extras
+from tqdm import tqdm
+import pprint
+pp = pprint.PrettyPrinter(indent=4)
 
 class Scraper:
     """Search the pitchup.com website and scrape details and images of each of the campsites returned."""
@@ -31,9 +36,11 @@ class Scraper:
         }
     }
 
-    def __init__(self):
+    def __init__(self, campsite_count=0, test_mode=False):
         """Initialise the scraper, creating local storage folder ./raw_data if it doesn't already exist."""
-        self.driver = webdriver.Chrome(ChromeDriverManager().install())
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         search_url = 'https://pitchup.com'
         self.driver.get(search_url)
         self.campsite_links = []
@@ -45,11 +52,38 @@ class Scraper:
         opener = urllib.request.build_opener()
         opener.addheaders = [('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.81 Safari/537.36')]
         urllib.request.install_opener(opener)
+        # Set up AWS clients
+        session = boto3.Session(profile_name='aicore', region_name='eu-west-2')
+        self.s3 = session.resource('s3')
+        self.rds_client = session.client('rds')
+        self.bucket = 'aicore-jf-campsite-bucket'
+        self.rds_params = {
+            "host":"campsite-db.c2fkdbcmduov.eu-west-2.rds.amazonaws.com",
+            "port":"5432",
+            "user":"postgres",
+            # "region":"eu-west-2",
+            "database":"campsites",
+            "password":"pennine1"
+        }
+        self.campsite_count = campsite_count
+        self.test_mode = test_mode
 
     def __create_folder_if_not_exists(f):
         """Create the specified folder if it doesn't already exist. Class method."""
         if not os.path.exists(f):
             os.makedirs(f)
+
+    def __clear_local_folder(self):
+        [f.unlink() for f in Path(self.storage_folder).glob('*') if f.is_file()]
+
+    def __rds_connect(self):
+        self.conn = None
+        try:
+            print('Connecting to PostgreSQL / RDS...')
+            self.conn = psycopg2.connect(sslmode='require', sslrootcert="./global-bundle.pem", **self.rds_params)
+            print('Connected OK ')
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(f"Error connecting to RDS: {error}")
 
     def open_england_search(self):
         """Open the search page for campsites in England."""
@@ -103,7 +137,11 @@ class Scraper:
 
 
     def _grab_links_from_search_results_page(self):
-        """Add to the scraper's list of campsites all those showing on the current search page."""
+        """Add to the scraper's list of campsites all those showing on the current search page.
+        
+        Result:
+            Number of links scraped from the current page.
+        """
         td_list = self.driver.find_elements(By.CLASS_NAME, 'campsite-name')
         self.campsite_links.extend([{
                 'name': td.text, 
@@ -117,14 +155,17 @@ class Scraper:
         Recursive: call this method while on the first page, and it will crawl until there are no more pages available.
         """
         self.page_num += 1
-        print(f'scraping page {self.page_num}...')
+        print(f'scraping page {self.page_num}... ({len(self.campsite_links)} sites so far)')
         # do the current page
         self._grab_links_from_search_results_page()
         # then scrape the next one
-        next_prev_page = self.driver.find_elements(By.CLASS_NAME, 'prevnext')
+        next_prev_page = self.driver.find_elements(By.XPATH, '//*[@class="paging"]//a[contains(@class,"prevnext")]')
         next_page = [p.get_attribute('href') for p in next_prev_page if p.text.startswith('Next')]
-        if test_mode or not next_page:
+        if self.test_mode or not next_page or len(self.campsite_links) >= self.campsite_count:
+            # print(f"Scraped details for {len(self.campsite_links)} campsites.")
+            # pp.pprint(self.campsite_links)
             return
+        print(f"Finished page {self.page_num} - now going to {next_page[0]}")
         self.driver.get(next_page[0])
         time.sleep(1)
         # recursion
@@ -146,20 +187,20 @@ class Scraper:
             print("Timed out loading details page")
         details = {}
         header = self.driver.find_element(By.CLASS_NAME, 'campsite-header')
-        details['name'] = header.find_element(By.TAG_NAME, 'h1').text
+        details['sitename'] = header.find_element(By.TAG_NAME, 'h1').text
         try: 
             details['rating'] = header.find_element(By.CLASS_NAME, 'rating_value').text.strip('')
         except:
             details['rating'] = ''
         try:
-            details['next_open'] = header.find_element(By.CLASS_NAME, 'next-open-date').get_attribute('data-next-open-date')
+            details['date_open'] = header.find_element(By.CLASS_NAME, 'next-open-date').get_attribute('data-next-open-date')
         except:
-            details['next_open'] = ''
+            details['date_open'] = ''
         try:
             pricing = self.driver.find_element(By.CLASS_NAME, 'headlineprice')
-            details['from_price_gbp'] = pricing.find_element(By.CLASS_NAME, 'money-GBP').text.strip('£')
+            details['price_from'] = pricing.find_element(By.CLASS_NAME, 'money-GBP').text.strip('£')
         except:
-            details['from_price_gbp'] = ''
+            details['price_from'] = ''
         try:
             desc = self.driver.find_element(By.ID, 'campsite_description')
             details['description'] = desc.text
@@ -175,7 +216,7 @@ class Scraper:
             # filter out links including h_30 because they're thumbnails
             details['images'] = [l.get_attribute('src') for l in image_links if 'h_30' not in l.get_attribute('src')]
         except:
-            details['images'] = []
+            details['images'] = [None]
         details['uuid'] = campsite['uuid']
         details['id'] = campsite['id']
         return details
@@ -186,55 +227,112 @@ class Scraper:
         Arguments:
         campsite - a dict (an element of the list generated by the scraper from search result pages) which includes the key 'url'
         """
+        sql_select = f"SELECT uuid FROM campsites WHERE id=%s"
         details = self._retrieve_specific_campsite_data(campsite)
-        campsite_file_folder = os.path.join(self.storage_folder, details['id'])
-        Scraper.__create_folder_if_not_exists(campsite_file_folder)
-        campsite_file_path = os.path.join(campsite_file_folder, 'data.json')
-        with open(campsite_file_path, 'w') as f:
-            json.dump(details, f)
-        if details['images']:
-            image_folder = os.path.join(campsite_file_folder, 'images')
-            Scraper.__create_folder_if_not_exists(image_folder)
-            for idx, img in enumerate(details['images']):
-                time.sleep(1)
-                urllib.request.urlretrieve(img, os.path.join(image_folder, f"{idx}.jpg"))
+        # upload to RDS
+        cursor = self.conn.cursor()
+        try:
+            # check if it's already in RDS
+            cursor.execute(sql_select, (details['id'],))
+        except (Exception, psycopg2.Error) as error:
+            print(f"Failed (on {details['id']}) with SQL SELECT check: ", error)
+        matching_rows = cursor.fetchall()
+        if len(matching_rows) == 0:
+            # write to RDS
+            details_for_df = details.copy()
+            del details_for_df['images']
+            details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
+            campsite_df = pd.DataFrame([details_for_df])
+            column_values = tuple(campsite_df.to_numpy()[0])
+            cols = ','.join(list(campsite_df.columns))
+            value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
+            insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
+            cursor.execute(insert_query, column_values)
+            self.conn.commit()  
+        cursor.close()
+        # write images to temp local file storage
+        if len(matching_rows) == 0:
+            #  go right ahead if we didn't find this campsite already in RDS
+            self.retrieve_and_upload_images(details)
+        else:
+            try:
+                # check if first image already exists in s3
+                self.s3.meta.client.head_object(Bucket=self.bucket, Key=f"{matching_rows[0][0]}-0.jpg")
+            except ClientError:
+                # key not found, so we'll upload them 
+                if details['images']:
+                    self.retrieve_and_upload_images(details)
+
+    def retrieve_and_upload_images(self, details):
+        # clear folder before we start
+        self.__clear_local_folder()
+        for idx, img in enumerate(details['images']):
+            time.sleep(1)
+            urllib.request.urlretrieve(img, os.path.join(self.storage_folder, f"{idx}.jpg"))
+        # upload them to S3
+        for filename in os.listdir(self.storage_folder):
+            try:
+                response = self.s3.meta.client.upload_file(os.path.join(self.storage_folder, filename), self.bucket, f"{details['uuid']}-{filename}")
+            except ClientError as e:
+                print(f"Error uploading image {filename} for {details['uuid']}: {e}")
+
 
     def save_all_campsite_data(self):
-        """Iterate through all campsites found in search, and save details and images to local filesystem."""
+        """Iterate through all campsites found in search, and save details and images to cloud (json) and local filesystem (images)."""
+        saved_count = 0
+        self.__rds_connect()
+        self.progress = tqdm(total=self.campsite_count)
         for campsite in self.campsite_links:
-            print(f"Saving details for {campsite['name']}...")
+            # print(f"Saving details for {campsite['name']}...")
             self.save_specific_campsite_data(campsite)
+            saved_count += 1
+            self.progress.update(1)
+            if (saved_count == self.campsite_count):
+                break
+    
+    # def upload_data_to_s3_and_rds(self):
+    #     self.__rds_connect()
+    #     campsite_df = pd.DataFrame()
+    #     for dirname in os.listdir(self.storage_folder):
+    #         dir = os.path.join(self.storage_folder, dirname)
+    #         if os.path.isdir(dir):
+    #             # prep this item to upload to RDS as a batch at the end 
+    #             with open(os.path.join(dir, 'data.json'), 'r') as f:
+    #                 d = json.load(f)
+    #                 if 'images' in d:
+    #                     del d['images']
+    #                 if 'bullets' in d:
+    #                     d['bullets'] = ' / '.join(d['bullets'])
+    #                 campsite_df = pd.concat([campsite_df, pd.DataFrame([d])])
 
-    def upload_data_to_s3(self):
-        session = boto3.Session(profile_name='aicore')
-        s3 = session.resource('s3')
-        for dirname in os.listdir(self.storage_folder):
-            dir = os.path.join(self.storage_folder, dirname)
-            if os.path.isdir(dir):
-                # first upload the data.json file
-                with open(os.path.join(dir, 'data.json'), 'r') as f:
-                    d = json.load(f)
-                try:
-                    response = s3.meta.client.upload_file(os.path.join(dir, 'data.json'), bucket, f"{d['uuid']}.json")
-                except ClientError as e:
-                    print(f"Error uploading data for {d['uuid']}: {e}")
-                # then the images, named {uuid}-0.jpg etc
-                images_folder = os.path.join(dir, 'images')
-                if os.path.exists(images_folder):
-                    for filename in os.listdir(images_folder):
-                        try:
-                            response = s3.meta.client.upload_file(os.path.join(images_folder, filename), bucket, f"{d['uuid']}-{filename}")
-                        except ClientError as e:
-                            print(f"Error uploading image {filename} for {d['uuid']}: {e}")
-
-        print("Uploaded everything")
-
+    #             # then the images, named {uuid}-0.jpg etc
+    #             images_folder = os.path.join(dir, 'images')
+    #             if os.path.exists(images_folder):
+    #                 for filename in os.listdir(images_folder):
+    #                     try:
+    #                         response = self.s3.meta.client.upload_file(os.path.join(images_folder, filename), self.bucket, f"{d['uuid']}-{filename}")
+    #                     except ClientError as e:
+    #                         print(f"Error uploading image {filename} for {d['uuid']}: {e}")
+    #     tuples = [tuple(x) for x in campsite_df.to_numpy()]
+    #     cols = ','.join(list(campsite_df.columns))
+    #     value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
+    #     query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
+    #     cursor = self.conn.cursor()
+    #     try:
+    #         extras.execute_batch(cursor, query, tuples)
+    #         self.conn.commit()
+    #         print('Finished writing all campsites to cloud storage.')
+    #         cursor.close()
+    #     except (Exception, psycopg2.DatabaseError) as error:
+    #         print("Error writing to RDS: {}".format(error))
+    #         self.conn.rollback()
+    #         cursor.close()
         
 
 if __name__ == "__main__":
-    scraper = Scraper()
+    scraper = Scraper(campsite_count=25, test_mode=False)
     scraper.open_england_search()
-    scraper.search_with_criteria({'keywords':'west sussex', 'types': ['tent','caravan']})
+    scraper.search_with_criteria({'types': ['tent','caravan']})
     scraper.scrape_pages()
     scraper.save_all_campsite_data()
-    scraper.upload_data_to_s3()
+    # scraper.upload_data_to_s3_and_rds()
