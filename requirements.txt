@@ -1,1 +1,6 @@
 selenium
+webdriver-manager
+boto3
+pandas
+psycopg2
+tqdm

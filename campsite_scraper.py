@@ -292,7 +292,7 @@ class Scraper:
                 break
 
 if __name__ == "__main__":
-    scraper = Scraper(campsite_count=25, test_mode=False)
+    scraper = Scraper(campsite_count=1200, test_mode=False)
     scraper.open_england_search()
     scraper.search_with_criteria({'types': ['tent','caravan']})
     scraper.scrape_pages()
