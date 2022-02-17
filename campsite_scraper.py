@@ -57,7 +57,7 @@ class Scraper:
         opener.addheaders = [('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.81 Safari/537.36')]
         urllib.request.install_opener(opener)
         # Set up AWS clients
-        session = boto3.Session(profile_name='aicore', region_name='eu-west-2')
+        session = boto3.Session()
         self.s3 = session.resource('s3')
         self.rds_client = session.client('rds')
         self.bucket = 'aicore-jf-campsite-bucket'
