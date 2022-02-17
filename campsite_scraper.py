@@ -72,6 +72,7 @@ class Scraper:
         self.campsite_count = campsite_count
         self.test_mode = test_mode
         self.metrics = {'new': 0, 'repeat': 0}
+        self.cursor = None
 
     def __create_folder_if_not_exists(f):
         """Create the specified folder if it doesn't already exist. Class method."""
@@ -235,33 +236,23 @@ class Scraper:
         sql_select = f"SELECT uuid FROM campsites WHERE id=%s"
         details = self._retrieve_specific_campsite_data(campsite)
         # upload to RDS
-        cursor = self.conn.cursor()
+        self.cursor = self.conn.cursor()
         try:
             # check if it's already in RDS
-            cursor.execute(sql_select, (details['id'],))
+            self.cursor.execute(sql_select, (details['id'],))
         except (Exception, psycopg2.Error) as error:
             print(f"Failed (on {details['id']}) with SQL SELECT check: ", error)
-        matching_rows = cursor.fetchall()
+        matching_rows = self.cursor.fetchall()
         if len(matching_rows) == 0:
             self.metrics['new'] += 1
-            # write to RDS
-            details_for_df = details.copy()
-            del details_for_df['images']
-            details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
-            campsite_df = pd.DataFrame([details_for_df])
-            column_values = tuple(campsite_df.to_numpy()[0])
-            cols = ','.join(list(campsite_df.columns))
-            value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
-            insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
-            cursor.execute(insert_query, column_values)
-            self.conn.commit()  
+            self._write_campsite_to_rds(details)
         else:
             self.metrics['repeat'] += 1
-        cursor.close()
+        self.cursor.close()
         # write images to temp local file storage
         if len(matching_rows) == 0:
-            #  go right ahead if we didn't find this campsite already in RDS
-            self.retrieve_and_upload_images(details)
+            #  go right ahead if we didn't find this campsite already in RDS - we know that the images won't be there
+            self._retrieve_and_upload_images(details)
         else:
             try:
                 # check if first image already exists in s3
@@ -269,9 +260,21 @@ class Scraper:
             except ClientError:
                 # key not found, so we'll upload them 
                 if details['images']:
-                    self.retrieve_and_upload_images(details)
+                    self._retrieve_and_upload_images(details)
 
-    def retrieve_and_upload_images(self, details):
+    def _write_campsite_to_rds(self, details):
+        details_for_df = details.copy()
+        del details_for_df['images']
+        details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
+        campsite_df = pd.DataFrame([details_for_df])
+        column_values = tuple(campsite_df.to_numpy()[0])
+        cols = ','.join(list(campsite_df.columns))
+        value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
+        insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
+        self.cursor.execute(insert_query, column_values)
+        self.conn.commit()  
+
+    def _retrieve_and_upload_images(self, details):
         """Retrieve key images for a given campsite and send them to S3."""
         # clear folder before we start
         self.__clear_local_folder()
@@ -306,4 +309,5 @@ if __name__ == "__main__":
     scraper.scrape_pages()
     scraper.save_all_campsite_data()
     print('\r\n\n')
-    print(scraper.metrics)
+    print(f"Out of {len(scraper.campsite_links)}, {scraper.metrics['new']} were new and {scraper.metrics['repeat']} already known.")
+    print('Finished.')
