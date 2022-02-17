@@ -60,7 +60,7 @@ class Scraper:
         session = boto3.Session()
         self.s3 = session.resource('s3')
         self.rds_client = session.client('rds')
-        self.bucket = 'aicore-jf-campsite-bucket'
+        self.bucket = 'aicore-jf-campsite2-bucket'
         self.rds_params = {
             "host":"campsite-db2.cv8wi4qhb3tj.eu-west-2.rds.amazonaws.com",
             "port":"5432",
