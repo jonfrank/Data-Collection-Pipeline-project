@@ -122,7 +122,7 @@ class Scraper:
         """
         for key, value in criteria.items():
             id_for_key = Scraper.field_ids[key]
-            if type(id_for_key) == str:
+            if type(id_for_key) is str:
                 self.__enter_data_into_box(id_for_key, value)
             else:
                 # id_for_key is a dict of ids
