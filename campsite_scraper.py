@@ -36,7 +36,7 @@ class Scraper:
         }
     }
 
-    def __init__(self, campsite_count=0, test_mode=False):
+    def __init__(self, campsite_count=0):
         """Initialise the scraper, creating local storage folder ./raw_data if it doesn't already exist."""
         chrome_options = Options()
         chrome_options.add_argument("--disable-dev-shm-usage")
@@ -70,7 +70,6 @@ class Scraper:
             "password":"pennine1"
         }
         self.campsite_count = campsite_count
-        self.test_mode = test_mode
         self.metrics = {'new': 0, 'repeat': 0}
         self.cursor = None
 
@@ -156,7 +155,7 @@ class Scraper:
                 'uuid': str(uuid.uuid4())
             } for td in td_list if td.text != ''])
 
-    def scrape_pages(self):
+    def scrape_pages(self, test_mode = False):
         """Scrape search result pages for campsite names, ids and links.
         Recursive: call this method while on the first page, and it will crawl until there are no more pages available.
         """
@@ -167,7 +166,7 @@ class Scraper:
         # then scrape the next one
         next_prev_page = self.driver.find_elements(By.XPATH, '//*[@class="paging"]//a[contains(@class,"prevnext")]')
         next_page = [p.get_attribute('href') for p in next_prev_page if p.text.startswith('Next')]
-        if self.test_mode or not next_page or len(self.campsite_links) >= self.campsite_count:
+        if test_mode or not next_page or len(self.campsite_links) >= self.campsite_count:
             # print(f"Scraped details for {len(self.campsite_links)} campsites.")
             # pp.pprint(self.campsite_links)
             return
@@ -304,10 +303,10 @@ class Scraper:
         self.progress.close()
 
 if __name__ == "__main__":
-    scraper = Scraper(campsite_count=10, test_mode=False)
+    scraper = Scraper(campsite_count=10)
     scraper.open_england_search()
     scraper.search_with_criteria({'types': ['tent','caravan']})
-    scraper.scrape_pages()
+    scraper.scrape_pages(test_mode=False)
     scraper.save_all_campsite_data()
     print('\r\n\n')
     print(f"Out of {len(scraper.campsite_links)}, {scraper.metrics['new']} were new and {scraper.metrics['repeat']} already known.")
