@@ -71,6 +71,7 @@ class Scraper:
         }
         self.campsite_count = campsite_count
         self.test_mode = test_mode
+        self.metrics = {'new': 0, 'repeat': 0}
 
     def __create_folder_if_not_exists(f):
         """Create the specified folder if it doesn't already exist. Class method."""
@@ -242,6 +243,7 @@ class Scraper:
             print(f"Failed (on {details['id']}) with SQL SELECT check: ", error)
         matching_rows = cursor.fetchall()
         if len(matching_rows) == 0:
+            self.metrics['new'] += 1
             # write to RDS
             details_for_df = details.copy()
             del details_for_df['images']
@@ -253,6 +255,8 @@ class Scraper:
             insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
             cursor.execute(insert_query, column_values)
             self.conn.commit()  
+        else:
+            self.metrics['repeat'] += 1
         cursor.close()
         # write images to temp local file storage
         if len(matching_rows) == 0:
@@ -301,3 +305,5 @@ if __name__ == "__main__":
     scraper.search_with_criteria({'types': ['tent','caravan']})
     scraper.scrape_pages()
     scraper.save_all_campsite_data()
+    print('\r\n\n')
+    print(scraper.metrics)
