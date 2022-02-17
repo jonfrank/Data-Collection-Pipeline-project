@@ -1,9 +1,7 @@
-from multiprocessing.connection import Client
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
@@ -13,16 +11,15 @@ from urllib.parse import urlparse
 import urllib.request
 import uuid
 import os
-import json
 import boto3
 from botocore.exceptions import ClientError
 from pathlib import Path
 import pandas as pd
 import psycopg2
-from psycopg2 import extras
 from tqdm import tqdm
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
+
 
 class Scraper:
     """Search the pitchup.com website and scrape details and images of each of the campsites returned."""
@@ -54,7 +51,7 @@ class Scraper:
         Scraper.__create_folder_if_not_exists(self.storage_folder)
         # urllib user-agent seems to be blocked by the image source (returns 403)
         opener = urllib.request.build_opener()
-        opener.addheaders = [('User-Agent','Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.81 Safari/537.36')]
+        opener.addheaders = [('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 12_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.81 Safari/537.36')]
         urllib.request.install_opener(opener)
         # Set up AWS clients
         session = boto3.Session()
@@ -62,12 +59,12 @@ class Scraper:
         self.rds_client = session.client('rds')
         self.bucket = 'aicore-jf-campsite2-bucket'
         self.rds_params = {
-            "host":"campsite-db2.cv8wi4qhb3tj.eu-west-2.rds.amazonaws.com",
-            "port":"5432",
-            "user":"postgres",
+            "host": "campsite-db2.cv8wi4qhb3tj.eu-west-2.rds.amazonaws.com",
+            "port": "5432",
+            "user": "postgres",
             # "region":"eu-west-2",
-            "database":"campsites",
-            "password":"pennine1"
+            "database": "campsites",
+            "password": "pennine1"
         }
         self.campsite_count = campsite_count
         self.metrics = {'new': 0, 'repeat': 0}
@@ -102,7 +99,7 @@ class Scraper:
         except TimeoutException:
             print("Timed out loading England search page")
     
-    def __enter_data_into_box(self, id, content = None):
+    def __enter_data_into_box(self, id, content=None):
         """Put the given data into the input field with the specified id.
         If no content is supplied, the input element is assumed to be a checkbox, and is just clicked.
         """
@@ -140,7 +137,6 @@ class Scraper:
         except TimeoutException:
             print("Timed out loading search results")
 
-
     def _grab_links_from_search_results_page(self):
         """Add to the scraper's list of campsites all those showing on the current search page.
         
@@ -151,11 +147,11 @@ class Scraper:
         self.campsite_links.extend([{
                 'name': td.text, 
                 'url': td.get_attribute('href'),
-                'id': urlparse(td.get_attribute('href')).path.strip('/').replace('/','-'),
+                'id': urlparse(td.get_attribute('href')).path.strip('/').replace('/', '-'),
                 'uuid': str(uuid.uuid4())
             } for td in td_list if td.text != ''])
 
-    def scrape_pages(self, test_mode = False):
+    def scrape_pages(self, test_mode=False):
         """Scrape search result pages for campsite names, ids and links.
         Recursive: call this method while on the first page, and it will crawl until there are no more pages available.
         """
@@ -262,6 +258,11 @@ class Scraper:
                     self._retrieve_and_upload_images(details)
 
     def _write_campsite_to_rds(self, details):
+        """Write tabular data for a particular campsite to RDS.
+        
+        Arguments:
+        details - a dict of the campsite attributes scraped from the website page
+        """
         details_for_df = details.copy()
         del details_for_df['images']
         details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
