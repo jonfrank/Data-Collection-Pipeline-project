@@ -5,7 +5,6 @@ RUN apt-get -y update && apt-get install -y google-chrome-stable
 RUN wget -O /tmp/chromedriver.zip http://chromedriver.storage.googleapis.com/`curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE`/chromedriver_linux64.zip
 RUN apt-get install -yqq unzip && unzip /tmp/chromedriver.zip chromedriver -d /usr/local/bin/
 RUN /usr/local/bin/python -m pip install --upgrade pip
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+RUN pip install .
 COPY . .
 CMD ["python", "campsite_scraper.py"]
