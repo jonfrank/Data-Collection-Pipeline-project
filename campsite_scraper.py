@@ -301,6 +301,7 @@ class Scraper:
             self.progress.update(1)
             if (saved_count == self.campsite_count):
                 break
+        self.progress.close()
 
 if __name__ == "__main__":
     scraper = Scraper(campsite_count=10, test_mode=False)
