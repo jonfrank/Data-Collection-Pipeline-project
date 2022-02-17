@@ -39,6 +39,10 @@ class Scraper:
     def __init__(self, campsite_count=0, test_mode=False):
         """Initialise the scraper, creating local storage folder ./raw_data if it doesn't already exist."""
         chrome_options = Options()
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--window-size=1920,180")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-setuid-sandbox")
         chrome_options.add_argument("--headless")
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         search_url = 'https://pitchup.com'
