@@ -62,7 +62,7 @@ class Scraper:
         self.rds_client = session.client('rds')
         self.bucket = 'aicore-jf-campsite-bucket'
         self.rds_params = {
-            "host":"campsite-db.c2fkdbcmduov.eu-west-2.rds.amazonaws.com",
+            "host":"campsite-db2.cv8wi4qhb3tj.eu-west-2.rds.amazonaws.com",
             "port":"5432",
             "user":"postgres",
             # "region":"eu-west-2",
