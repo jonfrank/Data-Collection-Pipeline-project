@@ -9,5 +9,5 @@ setup(
     author='Jonathan Frank',
     license='MIT',
     packages=find_packages(),
-    install_requires=['selenium','webdriver-manager','boto3','pandas','psycopg2','tqdm']
+    install_requires=['selenium','webdriver-manager','boto3','pandas','psycopg2','tqdm','sqlalchemy']
 )

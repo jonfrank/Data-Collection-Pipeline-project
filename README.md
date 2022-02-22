@@ -3,7 +3,13 @@
 **Scraper** is a Python library for scraping data from a campsite website.
 This is the second project in AiCore - a webscraper based on Selenium. I've chosen to get campsite data as my test case, from [pitchup.com](https://pitchup.com/campsites/England).
 
-Relies on local copy of AWS credentials and access to the bucket (as configure near the top of the file).
+Relies on local copy of AWS credentials and access to the bucket (as configured near the top of the file).
+
+## Docker
+
+Build it just with `docker build .`
+
+AWS credentials need to be supplied as env vars at time of `docker run`
 
 ## Installation
 
