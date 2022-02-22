@@ -16,6 +16,7 @@ from botocore.exceptions import ClientError
 from pathlib import Path
 import pandas as pd
 import psycopg2
+import sqlalchemy
 from tqdm import tqdm
 import pprint
 pp = pprint.PrettyPrinter(indent=4)
@@ -69,6 +70,7 @@ class Scraper:
         self.campsite_count = campsite_count
         self.metrics = {'new': 0, 'repeat': 0}
         self.cursor = None
+        self.campsite_data = []
 
     def __create_folder_if_not_exists(f):
         """Create the specified folder if it doesn't already exist. Class method."""
@@ -84,6 +86,8 @@ class Scraper:
             print('Connecting to PostgreSQL / RDS...')
             self.conn = psycopg2.connect(sslmode='require', sslrootcert="./global-bundle.pem", **self.rds_params)
             print('Connected OK ')
+            self.engine = sqlalchemy.create_engine(f"postgresql+psycopg2://{self.rds_params.user}:{self.rds_params.password}@{self.rds_params.host}:{self.rds_params.port}/{self.rds_params.database}")
+            print('Created sqlalchemy engine')
         except (Exception, psycopg2.DatabaseError) as error:
             print(f"Error connecting to RDS: {error}")
 
@@ -240,7 +244,8 @@ class Scraper:
         matching_rows = self.cursor.fetchall()
         if len(matching_rows) == 0:
             self.metrics['new'] += 1
-            self._write_campsite_to_rds(details)
+            # self._write_campsite_to_rds(details)
+            self._add_campsite_to_data_list(details)
         else:
             self.metrics['repeat'] += 1
         self.cursor.close()
@@ -257,8 +262,25 @@ class Scraper:
                 if details['images']:
                     self._retrieve_and_upload_images(details)
 
-    def _write_campsite_to_rds(self, details):
-        """Write tabular data for a particular campsite to RDS.
+    # def _write_campsite_to_rds(self, details):
+    #     """Write tabular data for a particular campsite to RDS.
+        
+    #     Arguments:
+    #     details - a dict of the campsite attributes scraped from the website page
+    #     """
+    #     details_for_df = details.copy()
+    #     del details_for_df['images']
+    #     details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
+    #     campsite_df = pd.DataFrame([details_for_df])
+    #     column_values = tuple(campsite_df.to_numpy()[0])
+    #     cols = ','.join(list(campsite_df.columns))
+    #     value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
+    #     insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
+    #     self.cursor.execute(insert_query, column_values)
+    #     self.conn.commit()  
+        
+    def _add_campsite_to_data_list(self, details):
+        """Prepare tabular data for a particular campsite to be written to RDS later as a complete batch.
         
         Arguments:
         details - a dict of the campsite attributes scraped from the website page
@@ -266,13 +288,11 @@ class Scraper:
         details_for_df = details.copy()
         del details_for_df['images']
         details_for_df['bullets'] = ' / '.join(details_for_df['bullets'])
-        campsite_df = pd.DataFrame([details_for_df])
-        column_values = tuple(campsite_df.to_numpy()[0])
-        cols = ','.join(list(campsite_df.columns))
-        value_placeholders = ','.join(['%s'] * len(list(campsite_df.columns)))
-        insert_query = "INSERT INTO campsites ({}) VALUES ({})".format(cols, value_placeholders)
-        self.cursor.execute(insert_query, column_values)
-        self.conn.commit()  
+        self.campsite_data.append(details_for_df)
+
+    def _write_all_campsites_to_rds(self):
+        details_for_rds = pd.DataFrame(self.campsite_data)
+        details_for_rds.to_sql('campsites', self.engine, if_exists='append')
 
     def _retrieve_and_upload_images(self, details):
         """Retrieve key images for a given campsite and send them to S3."""
@@ -301,6 +321,7 @@ class Scraper:
             self.progress.update(1)
             if (saved_count == self.campsite_count):
                 break
+        self._write_all_campsites_to_rds()
         self.progress.close()
 
 if __name__ == "__main__":
