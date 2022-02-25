@@ -85,8 +85,8 @@ class Scraper:
         try:
             print('Connecting to PostgreSQL / RDS...')
             self.conn = psycopg2.connect(sslmode='require', sslrootcert="./global-bundle.pem", **self.rds_params)
-            print('Connected OK ')
-            self.engine = sqlalchemy.create_engine(f"postgresql+psycopg2://{self.rds_params.user}:{self.rds_params.password}@{self.rds_params.host}:{self.rds_params.port}/{self.rds_params.database}")
+            print('Connected OK - now trying to create the engine')
+            self.engine = sqlalchemy.create_engine(f"postgresql+psycopg2://{self.rds_params['user']}:{self.rds_params['password']}@{self.rds_params['host']}:{self.rds_params['port']}/{self.rds_params['database']}")
             print('Created sqlalchemy engine')
         except (Exception, psycopg2.DatabaseError) as error:
             print(f"Error connecting to RDS: {error}")
