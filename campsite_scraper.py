@@ -325,10 +325,15 @@ class Scraper:
         self.progress.close()
 
 if __name__ == "__main__":
+    print('Welcome to the campsite scraper!')
     scraper = Scraper(campsite_count=10)
+    print('Opening England')
     scraper.open_england_search()
+    print('Searching')
     scraper.search_with_criteria({'types': ['tent','caravan']})
+    print('Scraping top level')
     scraper.scrape_pages(test_mode=False)
+    print('Getting details')
     scraper.save_all_campsite_data()
     print('\r\n\n')
     print(f"Out of {len(scraper.campsite_links)}, {scraper.metrics['new']} were new and {scraper.metrics['repeat']} already known.")
