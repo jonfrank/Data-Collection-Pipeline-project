@@ -191,8 +191,11 @@ class Scraper:
         except TimeoutException:
             print("Timed out loading details page")
         details = {}
-        header = self.driver.find_element(By.CLASS_NAME, 'campsite-header')
-        details['sitename'] = header.find_element(By.TAG_NAME, 'h1').text
+        try:
+            header = self.driver.find_element(By.CLASS_NAME, 'campsite-header')
+            details['sitename'] = header.find_element(By.TAG_NAME, 'h1').text
+        except:
+            return None
         try: 
             details['rating'] = header.find_element(By.CLASS_NAME, 'rating_value').text.strip('')
         except:
@@ -234,6 +237,8 @@ class Scraper:
         """
         sql_select = f"SELECT uuid FROM campsites WHERE id=%s"
         details = self._retrieve_specific_campsite_data(campsite)
+        if details==None:
+            return
         # upload to RDS
         self.cursor = self.conn.cursor()
         try:
@@ -326,7 +331,7 @@ class Scraper:
 
 if __name__ == "__main__":
     print('Welcome to the campsite scraper!')
-    scraper = Scraper(campsite_count=10)
+    scraper = Scraper(campsite_count=1000)
     print('Opening England')
     scraper.open_england_search()
     print('Searching')
