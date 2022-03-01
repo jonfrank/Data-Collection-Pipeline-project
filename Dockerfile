@@ -7,5 +7,5 @@ RUN apt-get install -yqq unzip && unzip /tmp/chromedriver.zip chromedriver -d /u
 RUN /usr/local/bin/python -m pip install --upgrade pip
 COPY setup.py .
 RUN pip install .
-COPY . .
+COPY campsites/scraper/. .
 CMD ["python", "campsite_scraper.py"]

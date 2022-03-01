@@ -1,5 +1,5 @@
 import unittest
-from campsite_scraper import Scraper
+from scraper.campsite_scraper import Scraper
 import selenium
 import os
 
