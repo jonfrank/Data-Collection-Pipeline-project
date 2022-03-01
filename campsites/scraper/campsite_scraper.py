@@ -331,7 +331,7 @@ class Scraper:
 
 if __name__ == "__main__":
     print('Welcome to the campsite scraper!')
-    scraper = Scraper(campsite_count=1000)
+    scraper = Scraper(campsite_count=100)
     print('Opening England')
     scraper.open_england_search()
     print('Searching')
